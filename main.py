@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import wandb
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.tensorboard import SummaryWriter
@@ -45,7 +46,7 @@ def metrics_to_string(metric_dict):
 ###
 
 # Evaluate function for validation and test
-def evaluate(model, data_loader, forward_fn, metrics_fn, i2w, logger, is_test=False):
+def evaluate(model, data_loader, forward_fn, metrics_fn, i2w, is_test=False):
     model.eval()
     total_loss, total_correct, total_labels = 0, 0, 0
 
@@ -134,7 +135,6 @@ def train(
                     (epoch + 1), total_train_loss / (i + 1), get_lr(args, optimizer)
                 )
             )
-            global_iter += 1
 
         metrics = metrics_fn(list_hyp, list_label)
         print(
@@ -149,11 +149,13 @@ def train(
         # evaluate
         if ((epoch + 1) % evaluate_every) == 0:
             val_loss, val_metrics = evaluate(
-                model, valid_loader, forward_fn, metrics_fn, i2w, logger=logger, is_test=False
+                model, valid_loader, forward_fn, metrics_fn, i2w, is_test=False
             )
-            logger.add_scalar("Loss/validation", val_loss, global_iter)
+            logger.log({"epoch": epoch + 1, "val_loss": val_loss})
+            # logger.add_scalar("Loss/validation", val_loss, global_iter)
             for name, value in val_metrics.items():
-                logger.add_scalar("f{name}/validation", value, global_iter)
+                logger.log({"epoch": epoch + 1, f"val_{name}": value})
+                # logger.add_scalar("f{name}/validation", value, global_iter)
             # Early stopping
             val_metric = val_metrics[valid_criterion]
             if best_val_metric < val_metric:
@@ -178,8 +180,8 @@ if __name__ == "__main__":
     # Parse args
     args = get_parser()
     args = append_dataset_args(args)
+    wandb.init(project="indonlu", config=args)
     model_checkpoint_name = os.path.basename(os.path.normpath(args["model_checkpoint"]))
-    logger = SummaryWriter(log_dir=LOG_PATH / args["dataset"] / args["experiment_name"] / model_checkpoint_name)
 
     # create directory
     model_dir = "{}/{}/{}/{}".format(args["model_dir"], args["dataset"], args["experiment_name"], model_checkpoint_name)
@@ -251,7 +253,7 @@ if __name__ == "__main__":
     # Train
     train(
         model,
-        logger=logger,
+        logger=wandb,
         train_loader=train_loader,
         valid_loader=valid_loader,
         optimizer=optimizer,
@@ -281,7 +283,6 @@ if __name__ == "__main__":
     print("=========== EVALUATION PHASE ===========")
     test_loss, test_metrics, test_hyp, test_label, test_seq = evaluate(
         model,
-        logger=logger,
         data_loader=test_loader,
         forward_fn=args["forward_fn"],
         metrics_fn=args["metrics_fn"],
