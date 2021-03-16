@@ -5,14 +5,24 @@ import os
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
-
-from transformers.activations import gelu, gelu_new, swish
+from transformers import (
+    AlbertModel,
+    AlbertPreTrainedModel,
+    AutoConfig,
+    AutoTokenizer,
+    BertConfig,
+    BertModel,
+    BertPreTrainedModel,
+    XLMConfig,
+    XLMModel,
+    XLMRobertaConfig,
+    XLMRobertaModel,
+)
+from transformers.activations import gelu, gelu_new
 from transformers.configuration_bert import BertConfig
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 from transformers.modeling_xlm import XLMPreTrainedModel
-from transformers import AlbertPreTrainedModel, BertPreTrainedModel, AlbertModel, BertModel, BertConfig, XLMModel, XLMConfig, XLMRobertaModel, XLMRobertaConfig
-from transformers import AutoTokenizer, AutoConfig
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-base-pytorch_model.bin",
@@ -35,6 +45,7 @@ XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "xlm-mlm-17-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-pytorch_model.bin",
     "xlm-mlm-100-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-pytorch_model.bin",
 }
+
 
 class BertForMultiLabelClassification(BertPreTrainedModel):
     def __init__(self, config):
@@ -102,12 +113,13 @@ class BertForMultiLabelClassification(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             total_loss = 0
             for i, (logit, num_label) in enumerate(zip(logits, self.num_labels)):
-                label = labels[:,i]
+                label = labels[:, i]
                 loss = loss_fct(logit.view(-1, num_label), label.view(-1))
                 total_loss += loss
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
+
 
 class AlbertForMultiLabelClassification(AlbertPreTrainedModel):
     def __init__(self, config):
@@ -175,12 +187,13 @@ class AlbertForMultiLabelClassification(AlbertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             total_loss = 0
             for i, (logit, num_label) in enumerate(zip(logits, self.num_labels)):
-                label = labels[:,i]
+                label = labels[:, i]
                 loss = loss_fct(logit, label.view(-1))
                 total_loss += loss
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
+
 
 class XLMForMultiLabelClassification(XLMPreTrainedModel):
     def __init__(self, config):
@@ -244,8 +257,8 @@ class XLMForMultiLabelClassification(XLMPreTrainedModel):
             head_mask=head_mask,
         )
 
-        sequence_output = self.dropout(self.pooler(outputs[0][:,0,:]))
-        
+        sequence_output = self.dropout(self.pooler(outputs[0][:, 0, :]))
+
         logits = []
         for classifier in self.classifiers:
             logits.append(classifier(sequence_output))
@@ -255,12 +268,13 @@ class XLMForMultiLabelClassification(XLMPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             total_loss = 0
             for i, (logit, num_label) in enumerate(zip(logits, self.num_labels)):
-                label = labels[:,i]
+                label = labels[:, i]
                 loss = loss_fct(logit, label.view(-1))
                 total_loss += loss
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
+
 
 class XLMRobertaForMultiLabelClassification(BertPreTrainedModel):
     config_class = XLMRobertaConfig
@@ -273,7 +287,7 @@ class XLMRobertaForMultiLabelClassification(BertPreTrainedModel):
 
         self.roberta = XLMRobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        
+
         self.pooler = nn.Sequential(nn.Linear(config.hidden_size, config.hidden_size), nn.Tanh())
         self.classifiers = nn.ModuleList([nn.Linear(config.hidden_size, num_label) for num_label in self.num_labels])
 
@@ -336,8 +350,8 @@ class XLMRobertaForMultiLabelClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        sequence_output = self.dropout(self.pooler(outputs[0][:,0,:]))
-        
+        sequence_output = self.dropout(self.pooler(outputs[0][:, 0, :]))
+
         logits = []
         for classifier in self.classifiers:
             logits.append(classifier(sequence_output))
@@ -347,21 +361,22 @@ class XLMRobertaForMultiLabelClassification(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             total_loss = 0
             for i, (logit, num_label) in enumerate(zip(logits, self.num_labels)):
-                label = labels[:,i]
+                label = labels[:, i]
                 loss = loss_fct(logit, label.view(-1))
                 total_loss += loss
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
 
+
 if __name__ == '__main__':
-    x = torch.LongTensor([[301,302,303,304]])
-    y = torch.LongTensor([[0,1,0,1,0,1]])
-    
+    x = torch.LongTensor([[301, 302, 303, 304]])
+    y = torch.LongTensor([[0, 1, 0, 1, 0, 1]])
+
     print("BertForMultiLabelClassification")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     config = AutoConfig.from_pretrained("bert-base-uncased")
-    config.num_labels_list = [3,3,3,3,3,3]
+    config.num_labels_list = [3, 3, 3, 3, 3, 3]
     model = BertForMultiLabelClassification.from_pretrained("bert-base-uncased", config=config)
     output = model(x, labels=y)
     print(output[0], output[1])
@@ -369,7 +384,7 @@ if __name__ == '__main__':
     print("AlbertForMultiLabelClassification")
     tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
     config = AutoConfig.from_pretrained("albert-base-v2")
-    config.num_labels_list = [3,3,3,3,3,3]
+    config.num_labels_list = [3, 3, 3, 3, 3, 3]
     model = AlbertForMultiLabelClassification.from_pretrained("albert-base-v2", config=config)
     output = model(x, labels=y)
     print(output[0], output[1])
@@ -377,7 +392,7 @@ if __name__ == '__main__':
     print("XLMForMultiLabelClassification")
     tokenizer = AutoTokenizer.from_pretrained("xlm-mlm-100-1280")
     config = AutoConfig.from_pretrained("xlm-mlm-100-1280")
-    config.num_labels_list = [2,2,2,2,2,2]
+    config.num_labels_list = [2, 2, 2, 2, 2, 2]
     model = XLMForMultiLabelClassification.from_pretrained("xlm-mlm-100-1280", config=config)
     output = model(x, labels=y)
     print(output[0], output[1])
@@ -385,8 +400,8 @@ if __name__ == '__main__':
     print("XLMRobertaForMultiLabelClassification")
     tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
     config = AutoConfig.from_pretrained("xlm-roberta-base")
-    config.num_labels_list = [2,3,4,5,6,7]
+    config.num_labels_list = [2, 3, 4, 5, 6, 7]
     model = XLMRobertaForMultiLabelClassification.from_pretrained("xlm-roberta-base", config=config)
     output = model(x, labels=y)
     print(output[0], output[1])
-    
+
