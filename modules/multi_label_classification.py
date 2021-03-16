@@ -1,10 +1,18 @@
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from transformers import (AlbertModel, AlbertPreTrainedModel, AutoConfig,
-                          AutoTokenizer, BertModel, BertPreTrainedModel,
-                          XLMModel, XLMRobertaConfig, XLMRobertaModel)
-from transformers.modeling_xlm import XLMPreTrainedModel
+from transformers import (
+    AlbertModel,
+    AlbertPreTrainedModel,
+    AutoConfig,
+    AutoTokenizer,
+    BertModel,
+    BertPreTrainedModel,
+    XLMModel,
+    XLMPreTrainedModel,
+    XLMRobertaConfig,
+    XLMRobertaModel,
+)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-base-pytorch_model.bin",
