@@ -179,10 +179,12 @@ if __name__ == "__main__":
     args = get_parser()
     args = append_dataset_args(args)
     wandb.init(project="indonlu", config=args)
-    model_checkpoint_name = os.path.basename(os.path.normpath(args["model_checkpoint"]))
+    model_checkpoint_name = args["model_checkpoint"].split("/")[0]
 
     # create directory
-    model_dir = "{}/{}/{}/{}".format(args["model_dir"], args["dataset"], args["experiment_name"], model_checkpoint_name)
+    model_dir = "{}/{}/{}/{}".format(
+        args["model_dir"], args["dataset_class"], args["experiment_name"], model_checkpoint_name
+    )
     if not os.path.exists(model_dir):
         os.makedirs(model_dir, exist_ok=True)
     elif args["force"]:
