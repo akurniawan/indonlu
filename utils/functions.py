@@ -4,37 +4,21 @@ from argparse import ArgumentParser
 import numpy as np
 import torch
 from modules.multi_label_classification import (
-    AlbertForMultiLabelClassification,
-    BertForMultiLabelClassification,
-    XLMForMultiLabelClassification,
-    XLMRobertaForMultiLabelClassification,
-)
-from modules.word_classification import (
-    AlbertForWordClassification,
-    BertForWordClassification,
-    XLMForWordClassification,
-    XLMRobertaForWordClassification,
-)
-from transformers import (
-    AlbertConfig,
-    AlbertForSequenceClassification,
-    AlbertModel,
-    AlbertTokenizer,
-    BertConfig,
-    BertForPreTraining,
-    BertForSequenceClassification,
-    BertModel,
-    BertTokenizer,
-    XLMConfig,
-    XLMForSequenceClassification,
-    XLMForTokenClassification,
-    XLMModel,
-    XLMRobertaConfig,
-    XLMRobertaForSequenceClassification,
-    XLMRobertaModel,
-    XLMRobertaTokenizer,
-    XLMTokenizer,
-)
+    AlbertForMultiLabelClassification, BertForMultiLabelClassification,
+    XLMForMultiLabelClassification, XLMRobertaForMultiLabelClassification)
+from modules.word_classification import (AlbertForWordClassification,
+                                         BertForWordClassification,
+                                         XLMForWordClassification,
+                                         XLMRobertaForWordClassification)
+from transformers import (AlbertConfig, AlbertForSequenceClassification,
+                          AlbertModel, AlbertTokenizer, BertConfig,
+                          BertForPreTraining, BertForSequenceClassification,
+                          BertModel, BertTokenizer, XLMConfig,
+                          XLMForSequenceClassification,
+                          XLMForTokenClassification, XLMModel,
+                          XLMRobertaConfig,
+                          XLMRobertaForSequenceClassification, XLMRobertaModel,
+                          XLMRobertaTokenizer, XLMTokenizer)
 
 
 class WordSplitTokenizer:
@@ -474,4 +458,23 @@ def load_model(args):
                 else BertForMultiLabelClassification
             )
         model = model_class.from_pretrained(args['model_checkpoint'], config=config)
+    else:
+        # bert-base-multilingual-uncased or bert-base-multilingual-cased
+        # Prepare config & tokenizer
+        vocab_path, config_path = None, None
+        tokenizer = BertTokenizer.from_pretrained(args['model_checkpoint'])
+        config = BertConfig.from_pretrained(args['model_checkpoint'])
+        if type(args['num_labels']) == list:
+            config.num_labels = max(args['num_labels'])
+            config.num_labels_list = args['num_labels']
+        else:
+            config.num_labels = args['num_labels']
+
+        # Instantiate model
+        if 'sequence_classification' == args['task']:
+            model = BertForSequenceClassification.from_pretrained(args['model_checkpoint'], config=config)
+        elif 'token_classification' == args['task']:
+            model = BertForWordClassification.from_pretrained(args['model_checkpoint'], config=config)
+        elif 'multi_label_classification' == args['task']:
+            model = BertForMultiLabelClassification.from_pretrained(args['model_checkpoint'], config=config)
     return model, tokenizer, vocab_path, config_path
