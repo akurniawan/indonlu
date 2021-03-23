@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
         # create directory
         class_name = args["dataset_class"].__name__.split(".")[-1]
-        wandb.run.name = "{}.{}.{}".format(class_name, model_checkpoint_name, args["model_checkpoint"].split("/")[1])
+        wandb.run.name = "{}.{}.{}".format(class_name, model_checkpoint_name, args["model_checkpoint"].split("/")[-1])
         model_dir = "{}/{}/{}/{}".format(args["model_dir"], class_name, args["experiment_name"], model_checkpoint_name)
         if not os.path.exists(model_dir):
             os.makedirs(model_dir, exist_ok=True)
@@ -205,8 +205,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(model.parameters(), lr=args["lr"])
 
         if args["fp16"]:
-            from apex import \
-                amp  # Apex is only required if we use fp16 training
+            from apex import amp  # Apex is only required if we use fp16 training
 
             model, optimizer = amp.initialize(model, optimizer, opt_level=args["fp16"])
 
