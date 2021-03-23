@@ -178,129 +178,131 @@ if __name__ == "__main__":
     # Parse args
     args = get_parser()
     args = append_dataset_args(args)
-    wandb.init(project="indonlu", config=args)
-    model_checkpoint_name = args["model_checkpoint"].split("/")[1]
+    with wandb.init(project="indonlu", config=args):
+        model_checkpoint_name = args["model_checkpoint"].split("/")[1]
 
-    # create directory
-    class_name = args["dataset_class"].__name__.split(".")[-1]
-    model_dir = "{}/{}/{}/{}".format(args["model_dir"], class_name, args["experiment_name"], model_checkpoint_name)
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir, exist_ok=True)
-    elif args["force"]:
-        print(f"overwriting model directory `{model_dir}`")
-    else:
-        raise Exception(
-            f"model directory `{model_dir}` already exists, use --force if you want to overwrite the folder"
+        # create directory
+        class_name = args["dataset_class"].__name__.split(".")[-1]
+        wandb.run.name = "{}.{}.{}".format(class_name, model_checkpoint_name, args["model_checkpoint"].split("/")[1])
+        model_dir = "{}/{}/{}/{}".format(args["model_dir"], class_name, args["experiment_name"], model_checkpoint_name)
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir, exist_ok=True)
+        elif args["force"]:
+            print(f"overwriting model directory `{model_dir}`")
+        else:
+            raise Exception(
+                f"model directory `{model_dir}` already exists, use --force if you want to overwrite the folder"
+            )
+
+        # Set random seed
+        set_seed(args["seed"])  # Added here for reproductibility
+
+        w2i, i2w = args["dataset_class"].LABEL2INDEX, args["dataset_class"].INDEX2LABEL
+        metrics_scores = []
+        result_dfs = []
+        # load model
+        model, tokenizer, vocab_path, config_path = load_model(args)
+        optimizer = optim.Adam(model.parameters(), lr=args["lr"])
+
+        if args["fp16"]:
+            from apex import \
+                amp  # Apex is only required if we use fp16 training
+
+            model, optimizer = amp.initialize(model, optimizer, opt_level=args["fp16"])
+
+        if args["device"] == "cuda":
+            model = model.cuda()
+
+        print("=========== TRAINING PHASE ===========")
+
+        train_dataset_path = args["train_set_path"]
+        train_dataset = args["dataset_class"](
+            train_dataset_path, tokenizer, lowercase=args["lower"], no_special_token=args["no_special_token"]
+        )
+        train_loader = args["dataloader_class"](
+            dataset=train_dataset,
+            max_seq_len=args["max_seq_len"],
+            batch_size=args["train_batch_size"],
+            num_workers=16,
+            shuffle=False,
         )
 
-    # Set random seed
-    set_seed(args["seed"])  # Added here for reproductibility
+        valid_dataset_path = args["valid_set_path"]
+        valid_dataset = args["dataset_class"](
+            valid_dataset_path, tokenizer, lowercase=args["lower"], no_special_token=args["no_special_token"]
+        )
+        valid_loader = args["dataloader_class"](
+            dataset=valid_dataset,
+            max_seq_len=args["max_seq_len"],
+            batch_size=args["valid_batch_size"],
+            num_workers=16,
+            shuffle=False,
+        )
 
-    w2i, i2w = args["dataset_class"].LABEL2INDEX, args["dataset_class"].INDEX2LABEL
-    metrics_scores = []
-    result_dfs = []
-    # load model
-    model, tokenizer, vocab_path, config_path = load_model(args)
-    optimizer = optim.Adam(model.parameters(), lr=args["lr"])
+        test_dataset_path = args["test_set_path"]
+        test_dataset = args["dataset_class"](
+            test_dataset_path, tokenizer, lowercase=args["lower"], no_special_token=args["no_special_token"]
+        )
+        test_loader = args["dataloader_class"](
+            dataset=test_dataset,
+            max_seq_len=args["max_seq_len"],
+            batch_size=args["valid_batch_size"],
+            num_workers=16,
+            shuffle=False,
+        )
 
-    if args["fp16"]:
-        from apex import amp  # Apex is only required if we use fp16 training
+        # Train
+        train(
+            model,
+            logger=wandb,
+            train_loader=train_loader,
+            valid_loader=valid_loader,
+            optimizer=optimizer,
+            forward_fn=args["forward_fn"],
+            metrics_fn=args["metrics_fn"],
+            valid_criterion=args["valid_criterion"],
+            i2w=i2w,
+            n_epochs=args["n_epochs"],
+            evaluate_every=1,
+            early_stop=args["early_stop"],
+            step_size=args["step_size"],
+            gamma=args["gamma"],
+            model_dir=model_dir,
+            exp_id=0,
+        )
 
-        model, optimizer = amp.initialize(model, optimizer, opt_level=args["fp16"])
+        # Save Meta
+        if vocab_path:
+            shutil.copyfile(vocab_path, f"{model_dir}/vocab.txt")
+        if config_path:
+            shutil.copyfile(config_path, f"{model_dir}/config.json")
 
-    if args["device"] == "cuda":
-        model = model.cuda()
+        # Load best model
+        model.load_state_dict(torch.load(model_dir + "/best_model_0.th"))
 
-    print("=========== TRAINING PHASE ===========")
+        # Evaluate
+        print("=========== EVALUATION PHASE ===========")
+        test_loss, test_metrics, test_hyp, test_label, test_seq = evaluate(
+            model,
+            data_loader=test_loader,
+            forward_fn=args["forward_fn"],
+            metrics_fn=args["metrics_fn"],
+            i2w=i2w,
+            is_test=True,
+        )
 
-    train_dataset_path = args["train_set_path"]
-    train_dataset = args["dataset_class"](
-        train_dataset_path, tokenizer, lowercase=args["lower"], no_special_token=args["no_special_token"]
-    )
-    train_loader = args["dataloader_class"](
-        dataset=train_dataset,
-        max_seq_len=args["max_seq_len"],
-        batch_size=args["train_batch_size"],
-        num_workers=16,
-        shuffle=False,
-    )
+        metrics_scores.append(test_metrics)
+        result_dfs.append(pd.DataFrame({"seq": test_seq, "hyp": test_hyp, "label": test_label}))
 
-    valid_dataset_path = args["valid_set_path"]
-    valid_dataset = args["dataset_class"](
-        valid_dataset_path, tokenizer, lowercase=args["lower"], no_special_token=args["no_special_token"]
-    )
-    valid_loader = args["dataloader_class"](
-        dataset=valid_dataset,
-        max_seq_len=args["max_seq_len"],
-        batch_size=args["valid_batch_size"],
-        num_workers=16,
-        shuffle=False,
-    )
+        result_df = pd.concat(result_dfs)
+        metric_df = pd.DataFrame.from_records(metrics_scores)
 
-    test_dataset_path = args["test_set_path"]
-    test_dataset = args["dataset_class"](
-        test_dataset_path, tokenizer, lowercase=args["lower"], no_special_token=args["no_special_token"]
-    )
-    test_loader = args["dataloader_class"](
-        dataset=test_dataset,
-        max_seq_len=args["max_seq_len"],
-        batch_size=args["valid_batch_size"],
-        num_workers=16,
-        shuffle=False,
-    )
+        print("== Prediction Result ==")
+        print(result_df.head())
+        print()
 
-    # Train
-    train(
-        model,
-        logger=wandb,
-        train_loader=train_loader,
-        valid_loader=valid_loader,
-        optimizer=optimizer,
-        forward_fn=args["forward_fn"],
-        metrics_fn=args["metrics_fn"],
-        valid_criterion=args["valid_criterion"],
-        i2w=i2w,
-        n_epochs=args["n_epochs"],
-        evaluate_every=1,
-        early_stop=args["early_stop"],
-        step_size=args["step_size"],
-        gamma=args["gamma"],
-        model_dir=model_dir,
-        exp_id=0,
-    )
+        print("== Model Performance ==")
+        print(metric_df.describe())
 
-    # Save Meta
-    if vocab_path:
-        shutil.copyfile(vocab_path, f"{model_dir}/vocab.txt")
-    if config_path:
-        shutil.copyfile(config_path, f"{model_dir}/config.json")
-
-    # Load best model
-    model.load_state_dict(torch.load(model_dir + "/best_model_0.th"))
-
-    # Evaluate
-    print("=========== EVALUATION PHASE ===========")
-    test_loss, test_metrics, test_hyp, test_label, test_seq = evaluate(
-        model,
-        data_loader=test_loader,
-        forward_fn=args["forward_fn"],
-        metrics_fn=args["metrics_fn"],
-        i2w=i2w,
-        is_test=True,
-    )
-
-    metrics_scores.append(test_metrics)
-    result_dfs.append(pd.DataFrame({"seq": test_seq, "hyp": test_hyp, "label": test_label}))
-
-    result_df = pd.concat(result_dfs)
-    metric_df = pd.DataFrame.from_records(metrics_scores)
-
-    print("== Prediction Result ==")
-    print(result_df.head())
-    print()
-
-    print("== Model Performance ==")
-    print(metric_df.describe())
-
-    result_df.to_csv(model_dir + "/prediction_result.csv")
-    metric_df.describe().to_csv(model_dir + "/evaluation_result.csv")
+        result_df.to_csv(model_dir + "/prediction_result.csv")
+        metric_df.describe().to_csv(model_dir + "/evaluation_result.csv")
