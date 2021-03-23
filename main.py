@@ -182,9 +182,8 @@ if __name__ == "__main__":
     model_checkpoint_name = args["model_checkpoint"].split("/")[1]
 
     # create directory
-    model_dir = "{}/{}/{}/{}".format(
-        args["model_dir"], args["dataset_class"].split(".")[-1], args["experiment_name"], model_checkpoint_name
-    )
+    class_name = type(args["dataset_class"]).__name__.split(".")[-1]
+    model_dir = "{}/{}/{}/{}".format(args["model_dir"], class_name, args["experiment_name"], model_checkpoint_name)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir, exist_ok=True)
     elif args["force"]:
