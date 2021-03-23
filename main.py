@@ -123,7 +123,7 @@ def train(
             optimizer.step()
 
             tr_loss = loss.item()
-            logger.add_scalar("Loss/train", tr_loss, global_iter)
+            logger.log({"epoch": epoch + 1, "train_loss": tr_loss})
             total_train_loss = total_train_loss + tr_loss
 
             # Calculate metrics
@@ -148,9 +148,7 @@ def train(
 
         # evaluate
         if ((epoch + 1) % evaluate_every) == 0:
-            val_loss, val_metrics = evaluate(
-                model, valid_loader, forward_fn, metrics_fn, i2w, is_test=False
-            )
+            val_loss, val_metrics = evaluate(model, valid_loader, forward_fn, metrics_fn, i2w, is_test=False)
             logger.log({"epoch": epoch + 1, "val_loss": val_loss})
             # logger.add_scalar("Loss/validation", val_loss, global_iter)
             for name, value in val_metrics.items():
